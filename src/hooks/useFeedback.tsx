@@ -7,37 +7,47 @@ import {
   setLoading,
   setError,
   clearError,
+  setPageInfo,
 } from "../store/feedbackSlice";
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import type { PaginatedFeedbacksResponse } from "../types/feedback.types";
 
-export const useFeedback = () => {
+export const useFeedback = (page: number = 1, limit: number = 10) => {
   const dispatch = useAppDispatch();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const {
     data: feedbacks,
     isLoading: isFetching,
     error: fetchError,
     refetch: refetchFeedbacks,
-  } = useQuery({
-    queryKey: ["feedbacks"],
-    queryFn: feedbackApi.getFeedbacks,
+  } = useQuery<PaginatedFeedbacksResponse>({
+    queryKey: ["feedbacks", page, limit],
+    queryFn: () => feedbackApi.getFeedbacks(page, limit),
     retry: false,
   });
 
-  // Handle success
   useEffect(() => {
-    if (feedbacks) {
-      dispatch(setFeedbacks(feedbacks));
+
+    if (feedbacks?.data) {
+      dispatch(setFeedbacks(feedbacks.data));
+    }
+    if (feedbacks?.pagination) {
+      dispatch(setPageInfo(feedbacks.pagination));
     }
   }, [feedbacks, dispatch]);
 
-  // Handle error
   useEffect(() => {
     if (fetchError) {
       dispatch(setError((fetchError as Error).message));
     }
   }, [fetchError, dispatch]);
+
+  useEffect(() => {
+    dispatch(setLoading(isFetching));
+  }, [isFetching, dispatch]);
 
   // Submit feedback mutation
   const submitFeedback = useMutation({
@@ -47,13 +57,9 @@ export const useFeedback = () => {
       dispatch(clearError());
     },
     onSuccess: (data) => {
-      console.log("DATA==>", data);
-
-      // Add to Redux store
       dispatch(addFeedback(data));
       dispatch(setLoading(false));
-
-      // Invalidate and refetch
+      navigate("/");
       queryClient.invalidateQueries({ queryKey: ["feedbacks"] });
     },
     onError: (error) => {
@@ -68,7 +74,7 @@ export const useFeedback = () => {
     isFetching,
     fetchError,
     refetchFeedbacks,
-    submitFeedback,
+    submitFeedback: submitFeedback.mutate,
     isLoading: submitFeedback.isPending,
   };
 };
